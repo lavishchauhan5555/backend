@@ -8,7 +8,7 @@ function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000);
 }
 
- const UserSignup = async (req, res) => {
+const UserSignup = async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -26,7 +26,9 @@ function generateOTP() {
     });
 
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
       auth: {
         user: process.env.SMTP_EMAIL,
         pass: process.env.SMTP_PASS,
@@ -44,11 +46,11 @@ function generateOTP() {
 
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "Signup failed", success: false });
+    res.status(500).json({ message: "Signup failed ", success: false });
   }
 };
 
- const verifyOtpAndRegister = async (req, res) => {
+const verifyOtpAndRegister = async (req, res) => {
   try {
     const { username, email, password, otp } = req.body;
 
@@ -85,17 +87,17 @@ function generateOTP() {
 
 
 // login controller logic
-const logincontroller = async(req,res)=>{
-  try{
-    const{email,password} = req.body;
-    const user = await User.findOne({email});
-    if(!user){
-    return res.status(401).json({message:"user not rejister ,Please Signup",success:false})
+const logincontroller = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "user not rejister ,Please Signup", success: false })
     }
-     const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
       return res.status(400).json({ message: "Invalid credentials" });
-     const token = jwt.sign(
+    const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }  // token valid for 7 days
@@ -110,10 +112,10 @@ const logincontroller = async(req,res)=>{
       }
     });
 
-  }catch(error){
-     console.log(error);
+  } catch (error) {
+    console.log(error);
     res.status(500).json({ message: "Login failed", error: error.message });
 
   }
 }
-export { UserSignup,verifyOtpAndRegister,logincontroller }
+export { UserSignup, verifyOtpAndRegister, logincontroller }
