@@ -10,78 +10,60 @@ function generateOTP() {
 
 const UserSignup = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, username, password } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists)
       return res.status(400).json({ message: "User already exists" });
 
-    const otpCode = generateOTP();
-
-    // Save OTP (MUST use new Date() for TTL)
-    await OTP.create({
-      email,
-      otp: otpCode,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
-    });
-
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_EMAIL,
-      to: email,
-      subject: "Your OTP Verification Code",
-      text: `Your OTP is ${otpCode}. It is valid for 5 minutes.`,
-    });
-
-    res.json({ message: "OTP sent successfully" });
-
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Signup failed ", success: false });
-  }
-};
-
-const verifyOtpAndRegister = async (req, res) => {
-  try {
-    const { username, email, password, otp } = req.body;
-
-    const validOtp = await OTP.findOne({
-      email,
-      otp,
-      expiresAt: { $gt: new Date() }, // check expiry
-    });
-
-    if (!validOtp)
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-
-    // Hash password before saving
     const hashed = await bcrypt.hash(password, 10);
-
     const newUser = await User.create({
       username,
       email,
       password: hashed,
     });
 
-    // Delete OTP immediately after use
-    await OTP.deleteMany({ email });
 
-    res.json({ message: "Registration successful", user: newUser });
+     res.json({ message: "Registration successful", user: newUser });
 
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: "OTP verification failed" });
+    
+    res.status(500).json({ message: "Signup failed ", success: false });
   }
 };
+
+// const verifyOtpAndRegister = async (req, res) => {
+//   try {
+//     const { username, email, password, otp } = req.body;
+
+//     const validOtp = await OTP.findOne({
+//       email,
+//       otp,
+//       expiresAt: { $gt: new Date() }, // check expiry
+//     });
+
+//     if (!validOtp)
+//       return res.status(400).json({ message: "Invalid or expired OTP" });
+
+//     // Hash password before saving
+//     const hashed = await bcrypt.hash(password, 10);
+
+//     const newUser = await User.create({
+//       username,
+//       email,
+//       password: hashed,
+//     });
+
+//     // Delete OTP immediately after use
+//     await OTP.deleteMany({ email });
+
+//     res.json({ message: "Registration successful", user: newUser });
+
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).json({ error: "OTP verification failed" });
+//   }
+// };
 
 
 
@@ -118,4 +100,4 @@ const logincontroller = async (req, res) => {
 
   }
 }
-export { UserSignup, verifyOtpAndRegister, logincontroller }
+export { UserSignup, logincontroller }
