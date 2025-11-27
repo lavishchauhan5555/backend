@@ -2,11 +2,35 @@ import User from "../Modals/user.js";
 import nodemailer from "nodemailer";
 import OTP from "../Modals/otp.js";
 import bcrypt from "bcrypt";
+import {requireAuth}  from "../Middlewares/auth.js"
+
+import {
+  createAccessToken,
+  createRefreshToken,
+  verifyRefreshToken,
+} from '../utils/jwt.js'
 
 // Generate random 6-digit OTP
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000);
 }
+
+
+const sendTokens = (res, userId) => {
+  const accessToken = createAccessToken(userId);
+  const refreshToken = createRefreshToken(userId);
+
+  // Send refresh token as HttpOnly cookie
+  res.cookie('jid', refreshToken, {
+    httpOnly: true,
+    secure: false, // change to true in production with HTTPS
+    sameSite: 'lax',
+    path: '/Auth/refresh',
+  });
+
+  return accessToken;
+};
+
 
 const UserSignup = async (req, res) => {
   try {
@@ -73,31 +97,50 @@ const logincontroller = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "user not rejister ,Please Signup", success: false })
-    }
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(400).json({ message: "Invalid credentials" });
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }  // token valid for 7 days
-    );
-    res.json({
-      message: "Login successful",
-      token,
-      user: {
-        _id: user._id,
-        username: user.username,
-        email: user.email
-      }
+    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) return res.status(400).json({ message: 'Invalid credentials' });
+
+    const accessToken = sendTokens(res, user._id);
+    return res.json({
+      accessToken,
+      user: { id: user._id, email: user.email },
     });
-
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Login failed", error: error.message });
-
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
   }
 }
-export { UserSignup, logincontroller }
+
+
+// 
+
+   const refreshpage = async (req, res) => {
+  const token = req.cookies.jid;
+  if (!token) return res.status(401).json({ message: 'No refresh token' });
+
+  try {
+    const payload = verifyRefreshToken(token);
+    const user = await User.findById(payload.userId);
+    if (!user) return res.status(401).json({ message: 'User not found' });
+
+    const accessToken = sendTokens(res, user._id); // also rotates refresh token
+    return res.json({
+      accessToken,
+      user: { id: user._id, email: user.email },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(401).json({ message: 'Refresh token invalid or expired' });
+  }
+}
+
+
+
+//
+const logout = async(req, res) => {
+  res.clearCookie('jid', { path: '/auth/refresh' });
+  return res.json({ message: 'Logged out' });
+}
+export { UserSignup, logincontroller ,refreshpage,logout}
