@@ -31,7 +31,7 @@ jspm_packages/
 .eslintcache
 
 # dotenv environment variables file
-.env
+.env/
 
 # Next.js build output
 .next/
@@ -46,3 +46,5 @@ temp/
 
 # VSCode settings folder
 .vscode/
+
+

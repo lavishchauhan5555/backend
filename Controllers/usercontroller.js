@@ -11,9 +11,9 @@ import {
 } from '../utils/jwt.js'
 
 // Generate random 6-digit OTP
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000);
-}
+// function generateOTP() {
+//   return Math.floor(100000 + Math.random() * 900000);
+// }
 
 
 const sendTokens = (res, userId) => {
@@ -25,7 +25,7 @@ const sendTokens = (res, userId) => {
     httpOnly: true,
     secure: false, // change to true in production with HTTPS
     sameSite: 'lax',
-    path: '/Auth/refresh',
+    path: '/',
   });
 
   return accessToken;
@@ -40,11 +40,11 @@ const UserSignup = async (req, res) => {
     if (userExists)
       return res.status(400).json({ message: "User already exists" });
 
-    const hashed = await bcrypt.hash(password, 10);
+    // const hashed = await bcrypt.hash(password, 10);
     const newUser = await User.create({
       username,
       email,
-      password: hashed,
+      password,
     });
 
 
@@ -96,20 +96,26 @@ const UserSignup = async (req, res) => {
 const logincontroller = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return res.status(400).json({ message: 'Invalid credentials' });
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(401).json({ message: "Invalid credentials a" });
+
+    const isMatch = await bcrypt.compare(password ,user.password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid credentials b" });
 
     const accessToken = sendTokens(res, user._id);
-    return res.json({
+
+   
+
+    res.json({
       accessToken,
-      user: { id: user._id, email: user.email },
+      user: { id: user._id, name: user.name, email: user.email },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    console.error("Login error", err);
+    res.status(500).json({ message: "Server error" });
   }
 }
 
@@ -140,7 +146,7 @@ const logincontroller = async (req, res) => {
 
 //
 const logout = async(req, res) => {
-  res.clearCookie('jid', { path: '/auth/refresh' });
+  res.clearCookie('jid', { path: '/refresh' });
   return res.json({ message: 'Logged out' });
 }
 export { UserSignup, logincontroller ,refreshpage,logout}
