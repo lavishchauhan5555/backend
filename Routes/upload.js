@@ -4,143 +4,221 @@ import { qdrant } from "../Modals/qdrant.js";
 import { verifyRefreshToken } from "../utils/jwt.js";
 import { chunkText } from "../utils/chunkText.js";
 import User from "../Modals/user.js";
+import Chat from "../Modals/chatHistory.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = express.Router();
 
-// ========================================
-// INIT GEMINI CLIENT (CORRECT)
-// ========================================
+// ---------------------------
+// INIT GEMINI (CORRECT MODELS)
+// ---------------------------
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Embedding model
-const EMBEDDING_MODEL = "text-embedding-004";
+const CHAT_MODEL = "gemini-2.5-flash";   // ✅ valid
+const EMBEDDING_MODEL = "models/text-embedding-004"; // ✅ valid
 
-// ========================================
-// Ensure Qdrant Collection Exists
-// ========================================
+// ---------------------------
+// Ensure Qdrant Collection
+// ---------------------------
 async function ensureCollection(name) {
   try {
-    const exists = await qdrant.getCollection(name).catch(() => null);
+    const list = await qdrant.getCollections();
+    const exists = list.collections.some((c) => c.name === name);
 
     if (!exists) {
       await qdrant.createCollection(name, {
-        vectors: { size: 768, distance: "Cosine" },
+        vectors: {
+          size: 768,
+          distance: "Cosine"
+        }
       });
+
       console.log(`Created Qdrant collection: ${name}`);
-    } else {
-      console.log(`Qdrant collection "${name}" already exists`);
     }
   } catch (err) {
-    console.error("Error ensuring Qdrant collection:", err);
-    throw err;
+    console.error("ensureCollection Error:", err);
   }
 }
 
-// ========================================
+// ---------------------------
 // Base64 → Buffer
-// ========================================
+// ---------------------------
 const base64ToBuffer = (b64) => Buffer.from(b64, "base64");
 
-// ========================================
-// ⭐ CORRECT GEMINI EMBEDDING FUNCTION
-// ========================================
+// ---------------------------
+// GEMINI → Embedding (WORKING)
+// ---------------------------
 async function getEmbedding(text) {
   try {
-    const model = ai.getGenerativeModel({ model: EMBEDDING_MODEL });
+    const embedModel = ai.getGenerativeModel({ model: EMBEDDING_MODEL });
 
-    const result = await model.embedContent(text);
+    const result = await embedModel.embedContent(text);
+    const embedding =
+      result.embedding?.values ||
+      result.data?.[0]?.embedding?.values;
 
-    if (!result.embedding || !result.embedding.values) {
-      throw new Error("Empty embedding returned from Gemini");
-    }
+    if (!embedding) throw new Error("No embedding returned");
+    return embedding;
 
-    return result.embedding.values; // Float32 array
   } catch (err) {
-    console.error("Gemini Embedding Error:", err);
+    console.error("Embedding Error:", err);
     throw err;
   }
 }
 
-// ========================================
-// UPLOAD + PROCESS ROUTE
-// ========================================
-router.post("/upload", async (req, res) => {
-  // Validate token
-  const token = req.cookies.jid;
-  if (!token) return res.status(401).json({ message: "No token" });
-
-  let userId;
+// ---------------------------
+// GEMINI → Chat (WORKING)
+// ---------------------------
+async function geminiAnswer(prompt) {
   try {
-    const payload = verifyRefreshToken(token);
-    userId = payload.userId;
+    const model = ai.getGenerativeModel({ model: CHAT_MODEL });
+    const result = await model.generateContent(String(prompt));
+    return result.response.text();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+    console.error("Gemini Chat Error:", err);
+    throw err;
   }
+}
 
+// ---------------------------
+// FINAL ENDPOINT
+// ---------------------------
+router.post("/upload", async (req, res) => {
   try {
+    // -------------------------
+    // AUTH
+    // -------------------------
+    const token = req.cookies.jid;
+    if (!token) return res.status(401).json({ message: "No token" });
+
+    let userId;
+    try {
+      const payload = verifyRefreshToken(token);
+      userId = payload.userId;
+    } catch {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    let text = req.body.text || "";
-    const files = req.body.files || [];
+    // -------------------------
+    // INPUTS
+    // -------------------------
+    const text = (req.body.text || "").trim();
+    const files = Array.isArray(req.body.files) ? req.body.files : [];
 
-    // ========================================
-    // Convert uploaded files → text
-    // ========================================
-    for (const f of files) {
-      const buffer = base64ToBuffer(f.data);
+    const hasText = text.length > 0;
+    const hasFile = files.length > 0;
 
-      if (f.type === "application/pdf") {
-        const pdfData = await pdfParse(buffer);
-        text += "\n" + pdfData.text;
-      } else if (f.type.startsWith("text")) {
-        text += "\n" + buffer.toString("utf8");
-      } else {
-        text += `\n[Unsupported File: ${f.name}, type: ${f.type}]`;
-      }
-    }
+    // -------------------------
+    // COLLECTION
+    // -------------------------
+    const collectionName =
+      typeof user.twinCollection === "string"
+        ? user.twinCollection
+        : `twin_${userId}`;
 
-    // Split into chunks
-    const chunks = chunkText(text, 500);
-
-    // ========================================
-    // Create/Find User Qdrant Collection
-    // ========================================
-    const collection = user.twinCollection || `twin_${userId}`;
-    await ensureCollection(collection);
+    await ensureCollection(collectionName);
 
     if (!user.twinCollection) {
-      user.twinCollection = collection;
+      user.twinCollection = collectionName;
       await user.save();
     }
 
-    // ========================================
-    // Generate Embeddings for Each Chunk
-    // ========================================
-    const points = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const emb = await getEmbedding(chunks[i]);
+    let extractedKnowledge = "";
 
-      points.push({
-        id: Date.now() + i,
-        vector: emb,
-        payload: { text: chunks[i] },
+    // -------------------------------------------------------
+    // PROCESS FILES
+    // -------------------------------------------------------
+    if (hasFile) {
+      for (const file of files) {
+        const buffer = base64ToBuffer(file.data);
+
+        if (file.type === "application/pdf") {
+          const parsed = await pdfParse(buffer);
+          extractedKnowledge += "\n" + (parsed.text || "");
+        } else if (file.type.startsWith("text")) {
+          extractedKnowledge += "\n" + buffer.toString("utf8");
+        }
+      }
+
+      extractedKnowledge = extractedKnowledge.trim();
+
+      if (extractedKnowledge) {
+        const chunks = chunkText(extractedKnowledge, 500);
+        const points = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i].trim();
+          if (!chunk) continue;
+
+          const vector = await getEmbedding(chunk);
+          points.push({
+            id: Date.now() + i,
+            vector,
+            payload: { text: chunk },
+          });
+        }
+
+        if (points.length > 0) {
+          await qdrant.upsert(collectionName, { points });
+        }
+      }
+    }
+
+    // Only file / no text
+    if (!hasText && hasFile) {
+      return res.json({
+        reply: "Your file has been processed and added to memory!"
       });
     }
 
-    // ========================================
-    // Store in Qdrant
-    // ========================================
-    await qdrant.upsert(collection, { points });
+    // -------------------------
+    // USER QUESTION
+    // -------------------------
+    if (hasText) {
+      await Chat.create({ userId, role: "user", message: text });
 
-    res.json({
-      msg: "Uploaded, processed & stored successfully!",
-      chunksStored: chunks.length,
-    });
+      const qVec = await getEmbedding(text);
+
+      const hits = await qdrant.search(collectionName, {
+        vector: qVec,
+        limit: 5,
+      });
+
+      const memory =
+        hits.map((h) => h.payload?.text)
+          .filter(Boolean)
+          .join("\n\n") || "No memory available.";
+
+      const prompt = `
+You are Lavish's AI Twin.
+
+Memory:
+${memory}
+
+User said:
+${text}
+
+Extracted File:
+${extractedKnowledge || "No file uploaded."}
+
+Reply helpfully.
+      `;
+
+      const answer = await geminiAnswer(prompt);
+
+      await Chat.create({ userId, role: "assistant", message: answer });
+
+      return res.json({ reply: answer });
+    }
+
+    return res.json({ reply: "Nothing received." });
+
   } catch (err) {
-    console.error("UPLOAD ERROR:", err);
-    res.status(500).json({ error: err.message });
+    console.error("FINAL ERROR:", err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
