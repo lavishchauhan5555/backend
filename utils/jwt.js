@@ -17,6 +17,9 @@ const verifyAccessToken = (token) => {
 };
 
 const verifyRefreshToken = (token) => {
+   if (!token) {
+    throw new Error("Refresh token missing");
+  }
   return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 };
 

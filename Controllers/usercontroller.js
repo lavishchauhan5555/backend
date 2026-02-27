@@ -2,7 +2,7 @@ import User from "../Modals/user.js";
 import nodemailer from "nodemailer";
 import OTP from "../Modals/otp.js";
 import bcrypt from "bcrypt";
-import {requireAuth}  from "../Middlewares/auth.js"
+import Conversation from "../Modals/conversation.js";
 
 import {
   createAccessToken,
@@ -47,8 +47,13 @@ const UserSignup = async (req, res) => {
       password,
     });
 
+    const accessToken = sendTokens(res, newUser._id);
 
-     res.json({ message: "Registration successful", user: newUser });
+
+      res.json({
+      accessToken,
+      user: { id: newUser._id, name: newUser.username, email: newUser.email },
+    });
 
   } catch (error) {
     
@@ -99,7 +104,7 @@ const logincontroller = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user)
-      return res.status(401).json({ message: "Invalid credentials a" });
+      return res.status(401).json({ message: "Invalid credentials " });
 
     const isMatch = await bcrypt.compare(password ,user.password);
     if (!isMatch)
@@ -111,7 +116,7 @@ const logincontroller = async (req, res) => {
 
     res.json({
       accessToken,
-      user: { id: user._id, name: user.name, email: user.email },
+      user: { id: user._id, name: user.username, email: user.email },
     });
   } catch (err) {
     console.error("Login error", err);
@@ -134,7 +139,7 @@ const logincontroller = async (req, res) => {
     const accessToken = sendTokens(res, user._id); // also rotates refresh token
     return res.json({
       accessToken,
-      user: { id: user._id, email: user.email },
+      user: { id: user._id, email: user.email ,name:user.username },
     });
   } catch (err) {
     console.error(err);
@@ -145,8 +150,64 @@ const logincontroller = async (req, res) => {
 
 
 //
-const logout = async(req, res) => {
-  res.clearCookie('jid', { path: '/refresh' });
+const logout = async (req, res) => {
+  res.clearCookie('jid', {
+    httpOnly: true,
+    secure: false, // same as cookie set
+    sameSite: 'lax',
+    path: '/',     // match the path
+  });
   return res.json({ message: 'Logged out' });
-}
-export { UserSignup, logincontroller ,refreshpage,logout}
+};
+
+
+
+
+
+
+
+// delete chat logic for the chats
+const deletechatcontroller = async (req, res) => {
+  try {
+     const { id } = req.params; 
+      const token = req.cookies.jid;
+  if (!token) return res.status(401).json({ message: 'No refresh token' });
+
+   
+    const payload = verifyRefreshToken(token);
+    const userId = payload.userId;
+
+   
+    const conversation = await Conversation.findOneAndUpdate(
+      { _id: id, userId, isDeleted: false },
+      {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+      { new: true }
+    );
+
+   
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: "Conversation not found or already deleted",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Chat deleted successfully",
+      conversationId: conversation._id,
+    });
+  } catch (error) {
+    console.error("Delete chat error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete chat",
+    });
+  }
+};
+
+export { UserSignup, logincontroller ,refreshpage,logout,deletechatcontroller}

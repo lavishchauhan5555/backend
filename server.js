@@ -10,7 +10,10 @@ import cookieParser from 'cookie-parser'
 import db from './Modals/db.js'
 db();
 import userauthrouter from './Routes/userauthrouter.js'
-import upload from './Routes/upload.js'
+// import upload from './Routes/upload.js'
+import deletechat from './Routes/deletechatroute.js'
+import chatroute from './Routes/chat.routes.js'
+import adminRoutes from "./Routes/admin.routes.js";
 // import './Modals/Connection.js'
 const app = express()
 const port = 3000
@@ -31,8 +34,11 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 })
 
- app.use('/Auth',userauthrouter)
- app.use('/Auth',upload)
+ app.use('/auth',userauthrouter)
+//  app.use('/auth',upload)
+ app.use('/auth',deletechat)
+ app.use('/auth',chatroute )
+ app.use("/auth", adminRoutes);
 
 
 app.listen(port, () => {
