@@ -4,20 +4,26 @@ FROM node:18
 # Set working directory
 WORKDIR /app
 
-# Copy package files first to install dependencies
+# Copy package files first
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm install --production
+# Install production dependencies
+RUN npm ci --only=production
 
-# Copy the rest of the backend code
+# Copy application code
 COPY . .
 
-# Set environment variable
+# Copy start script
+COPY start.sh /app/start.sh
+
+# Give execute permission
+RUN chmod +x /app/start.sh
+
+# Environment variable
 ENV PORT=3000
 
 # Expose port
 EXPOSE 3000
 
-# Start server
-CMD ["node", "server.js"]
+# Start both server and worker
+CMD ["/bin/bash", "/app/start.sh"]
