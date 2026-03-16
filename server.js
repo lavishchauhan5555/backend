@@ -18,7 +18,7 @@ import adminRoutes from "./Routes/admin.routes.js";
 const app = express()
 const port = 3000
 app.use(cors({ 
- origin: "http://localhost:5173", // frontend URL
+ origin: "https://backend-3akg.onrender.com", // frontend URL
   methods: "GET,POST,PUT,DELETE",
   credentials: true,
 }));
