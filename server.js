@@ -18,8 +18,10 @@ import adminRoutes from "./Routes/admin.routes.js";
 const app = express()
 const port = process.env.PORT || 3000
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: "https://frontend-p07y.onrender.com",
+  credentials: true,
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"]
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
