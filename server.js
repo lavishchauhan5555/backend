@@ -16,8 +16,11 @@ import chatroute from './Routes/chat.routes.js'
 import adminRoutes from "./Routes/admin.routes.js";
 // import './Modals/Connection.js'
 const app = express()
-const port = 3000
-app.use(cors());
+const port = process.env.PORT || 3000
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -38,6 +41,6 @@ app.get('/', (req, res) => {
 
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port} `)
+  console.log(`Server running on port ${port}`);
   checkQdrantConnection();
-})
+});
