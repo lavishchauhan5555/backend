@@ -23,8 +23,8 @@ const sendTokens = (res, userId) => {
   // Send refresh token as HttpOnly cookie
   res.cookie('jid', refreshToken, {
     httpOnly: true,
-    secure: false, // change to true in production with HTTPS
-    sameSite: 'lax',
+    secure: true, // change to true in production with HTTPS
+    sameSite: 'none',
     path: '/',
   });
 
