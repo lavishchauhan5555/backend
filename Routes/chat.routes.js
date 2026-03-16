@@ -25,6 +25,7 @@ async function geminiAnswer(prompt) {
 
 /* ================= CREATE NEW CHAT ================= */
 router.post("/new-chat", async (req, res) => {
+  console.log("cookies:", req.cookies);
   try {
     const payload = verifyRefreshToken(req.cookies.jid);
 

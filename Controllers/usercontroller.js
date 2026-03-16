@@ -21,12 +21,13 @@ const sendTokens = (res, userId) => {
   const refreshToken = createRefreshToken(userId);
 
   // Send refresh token as HttpOnly cookie
-  res.cookie('jid', refreshToken, {
-    httpOnly: true,
-    secure: true, // change to true in production with HTTPS
-    sameSite: 'none',
-    path: '/',
-  });
+  res.cookie("jid", refreshToken, {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000
+});
 
   return accessToken;
 };
