@@ -50,7 +50,7 @@ const UserSignup = async (req, res) => {
     const accessToken = sendTokens(res, newUser._id);
 
 
-      res.json({
+      res.json({ 
       accessToken,
       user: { id: newUser._id, name: newUser.username, email: newUser.email },
     });
